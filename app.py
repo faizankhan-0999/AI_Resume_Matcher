@@ -7,6 +7,8 @@ from io import BytesIO
 from typing import List
 
 import streamlit as st
+import plotly.express as px
+import plotly.graph_objects as go
 from pydantic import BaseModel, Field, ValidationError
 from pypdf import PdfReader
 from google import genai
@@ -231,11 +233,33 @@ st.markdown(
         padding-bottom: 3rem;
     }
     .hero {
-        padding: 1.5rem 1.6rem;
+        padding: 1.6rem 1.8rem;
         border-radius: 18px;
-        background: linear-gradient(120deg, #14213d, #243b65);
+        background: linear-gradient(120deg, #123b72, #2563eb);
         color: white;
         margin-bottom: 1.2rem;
+        box-shadow: 0 8px 24px rgba(37, 99, 235, .14);
+    }
+    .dashboard-section {
+        padding: 1rem 1.1rem;
+        border: 1px solid #dbeafe;
+        border-radius: 14px;
+        background: #ffffff;
+        margin-bottom: .8rem;
+    }
+    div[data-testid="stMetric"] {
+        background: #f8fbff;
+        border: 1px solid #dbeafe;
+        padding: 1rem;
+        border-radius: 14px;
+    }
+    div[data-testid="stTabs"] button[aria-selected="true"] {
+        color: #1d4ed8;
+        border-bottom-color: #2563eb;
+    }
+    @media (prefers-color-scheme: dark) {
+        .dashboard-section { background: #111827; border-color: #334155; }
+        div[data-testid="stMetric"] { background: #111827; border-color: #334155; }
     }
     .hero h1 {
         color: white;
@@ -382,22 +406,95 @@ if analyze_clicked:
 
                 st.success("Analysis complete.")
                 st.markdown("## Your results")
+                st.caption("A clear overview of your resume's alignment with this role.")
 
-                metric_col, explanation_col = st.columns([1, 2])
+                # Top-level dashboard metrics
+                metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+                metric_col1.metric("Estimated match", f"{result.match_score}%")
+                metric_col2.metric("Matching skills", len(result.matching_skills))
+                metric_col3.metric("Skills to address", len(result.missing_skills))
+                metric_col4.metric("Suggested improvements", len(result.resume_improvements))
 
-                with metric_col:
-                    st.metric("Estimated match", f"{result.match_score}/100")
-                    st.progress(result.match_score / 100)
+                overview_col, insight_col = st.columns([1.05, 1.5], gap="large")
 
-                with explanation_col:
-                    st.subheader("What this score means")
+                with overview_col:
+                    st.markdown('<div class="dashboard-section">', unsafe_allow_html=True)
+                    st.subheader("Match score")
+                    gauge = go.Figure(go.Indicator(
+                        mode="gauge+number",
+                        value=result.match_score,
+                        number={"suffix": "%", "font": {"size": 38, "color": "#1d4ed8"}},
+                        gauge={
+                            "axis": {"range": [0, 100], "tickwidth": 1, "tickcolor": "#64748b"},
+                            "bar": {"color": "#2563eb", "thickness": 0.28},
+                            "bgcolor": "#eff6ff",
+                            "borderwidth": 0,
+                            "steps": [
+                                {"range": [0, 40], "color": "#fee2e2"},
+                                {"range": [40, 70], "color": "#fef3c7"},
+                                {"range": [70, 100], "color": "#dbeafe"},
+                            ],
+                        },
+                    ))
+                    gauge.update_layout(height=250, margin=dict(l=15, r=15, t=15, b=5), paper_bgcolor="rgba(0,0,0,0)")
+                    st.plotly_chart(gauge, use_container_width=True, config={"displayModeBar": False})
+                    st.markdown('</div>', unsafe_allow_html=True)
+
+                with insight_col:
+                    st.markdown('<div class="dashboard-section">', unsafe_allow_html=True)
+                    st.subheader("Score interpretation")
                     st.write(result.score_explanation)
+                    st.progress(result.match_score / 100)
+                    st.info(
+                        "This is an AI estimate, not an official ATS score, a hiring decision, "
+                        "or a guarantee of employment. Review all suggestions for accuracy."
+                    )
+                    st.markdown('</div>', unsafe_allow_html=True)
 
-                st.info(
-                    "This is an AI estimate, not an official ATS score, "
-                    "a hiring decision, or a guarantee of employment. "
-                    "Review all suggestions for accuracy before editing your resume."
-                )
+                st.markdown("### Skills overview")
+                skill_col1, skill_col2 = st.columns(2, gap="large")
+
+                with skill_col1:
+                    st.markdown('<div class="dashboard-section">', unsafe_allow_html=True)
+                    st.subheader("Skills that match")
+                    if result.matching_skills:
+                        matching_df = {"Skill": result.matching_skills, "Category": ["Matching"] * len(result.matching_skills)}
+                        matching_fig = px.bar(
+                            matching_df, x="Skill", y=[1] * len(result.matching_skills),
+                            color="Category", color_discrete_map={"Matching": "#2563eb"},
+                            labels={"y": "", "Skill": ""},
+                        )
+                        matching_fig.update_layout(
+                            showlegend=False, height=max(220, min(380, 42 * len(result.matching_skills))),
+                            margin=dict(l=10, r=10, t=10, b=10), xaxis_tickangle=-35,
+                            yaxis={"visible": False}, paper_bgcolor="rgba(0,0,0,0)",
+                            plot_bgcolor="rgba(0,0,0,0)",
+                        )
+                        st.plotly_chart(matching_fig, use_container_width=True, config={"displayModeBar": False})
+                    else:
+                        st.caption("No clearly matching skills were identified.")
+                    st.markdown('</div>', unsafe_allow_html=True)
+
+                with skill_col2:
+                    st.markdown('<div class="dashboard-section">', unsafe_allow_html=True)
+                    st.subheader("Skills to address")
+                    if result.missing_skills:
+                        missing_df = {"Skill": result.missing_skills, "Category": ["To address"] * len(result.missing_skills)}
+                        missing_fig = px.bar(
+                            missing_df, x="Skill", y=[1] * len(result.missing_skills),
+                            color="Category", color_discrete_map={"To address": "#0f766e"},
+                            labels={"y": "", "Skill": ""},
+                        )
+                        missing_fig.update_layout(
+                            showlegend=False, height=max(220, min(380, 42 * len(result.missing_skills))),
+                            margin=dict(l=10, r=10, t=10, b=10), xaxis_tickangle=-35,
+                            yaxis={"visible": False}, paper_bgcolor="rgba(0,0,0,0)",
+                            plot_bgcolor="rgba(0,0,0,0)",
+                        )
+                        st.plotly_chart(missing_fig, use_container_width=True, config={"displayModeBar": False})
+                    else:
+                        st.caption("No clear skill gaps were identified.")
+                    st.markdown('</div>', unsafe_allow_html=True)
 
                 tab1, tab2, tab3 = st.tabs([
                     "Match overview",
@@ -407,50 +504,37 @@ if analyze_clicked:
 
                 with tab1:
                     col1, col2 = st.columns(2)
-
                     with col1:
                         show_list(
-                            "✅ Matching skills",
-                            result.matching_skills,
-                            "No clearly matching skills were identified.",
-                        )
-                        show_list(
-                            "💪 Relevant strengths",
+                            "Relevant strengths",
                             result.relevant_strengths,
                             "No specific strengths were identified from the supplied text.",
                         )
-
                     with col2:
                         show_list(
-                            "🧩 Skills to address",
-                            result.missing_skills,
-                            "No clear skill gaps were identified.",
-                        )
-                        show_list(
-                            "🔎 Evidence and limitations",
+                            "Evidence and limitations",
                             result.evidence_notes,
                             "No additional limitations noted.",
                         )
 
                 with tab2:
                     show_list(
-                        "🛠️ Specific resume improvements",
+                        "Specific resume improvements",
                         result.resume_improvements,
                         "No improvements were returned.",
                     )
                     show_list(
-                        "🏷️ Relevant keyword recommendations",
+                        "Relevant keyword recommendations",
                         result.keyword_recommendations,
                         "No keyword recommendations were returned.",
                     )
                     st.caption(
-                        "Only include a suggested keyword if it truthfully "
-                        "reflects your skills or experience."
+                        "Only include a suggested keyword if it truthfully reflects your skills or experience."
                     )
 
                 with tab3:
                     show_list(
-                        "🎤 Interview questions to prepare for",
+                        "Interview questions to prepare for",
                         result.interview_preparation,
                         "No interview suggestions were returned.",
                     )
