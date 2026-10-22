@@ -7,6 +7,8 @@ from io import BytesIO
 from typing import List
 
 import streamlit as st
+import pandas as pd
+import plotly.express as px
 from pydantic import BaseModel, Field, ValidationError
 from pypdf import PdfReader
 from google import genai
@@ -398,6 +400,99 @@ if analyze_clicked:
                     "a hiring decision, or a guarantee of employment. "
                     "Review all suggestions for accuracy before editing your resume."
                 )
+
+                # Build a structured table for the dashboard using Pandas.
+                st.markdown("## 📊 Skills Analytics Dashboard")
+                skills_rows = (
+                    [{"Skill": skill, "Status": "Matching skill"}
+                     for skill in result.matching_skills]
+                    + [{"Skill": skill, "Status": "Skill to develop"}
+                       for skill in result.missing_skills]
+                )
+
+                if skills_rows:
+                    skills_df = pd.DataFrame(skills_rows)
+                    status_order = ["Matching skill", "Skill to develop"]
+                    skills_df["Status"] = pd.Categorical(
+                        skills_df["Status"], categories=status_order, ordered=True
+                    )
+
+                    dashboard_col1, dashboard_col2, dashboard_col3 = st.columns(3)
+                    dashboard_col1.metric("Estimated match", f"{result.match_score}%")
+                    dashboard_col2.metric("Matching skills", len(result.matching_skills))
+                    dashboard_col3.metric("Skills to develop", len(result.missing_skills))
+
+                    skill_counts = (
+                        skills_df.groupby("Status", observed=False)
+                        .size()
+                        .reindex(status_order, fill_value=0)
+                        .rename_axis("Status")
+                        .reset_index(name="Number of skills")
+                    )
+
+                    chart_col1, chart_col2 = st.columns(2, gap="large")
+                    with chart_col1:
+                        skills_bar = px.bar(
+                            skill_counts,
+                            x="Status",
+                            y="Number of skills",
+                            color="Status",
+                            text="Number of skills",
+                            title="Skills comparison",
+                            template="plotly_white",
+                            color_discrete_map={
+                                "Matching skill": "#2563EB",
+                                "Skill to develop": "#F59E0B",
+                            },
+                        )
+                        skills_bar.update_layout(
+                            showlegend=False,
+                            xaxis_title="",
+                            yaxis_title="Skill count",
+                            margin=dict(l=10, r=10, t=55, b=10),
+                        )
+                        st.plotly_chart(skills_bar, use_container_width=True)
+
+                    with chart_col2:
+                        if int(skill_counts["Number of skills"].sum()) > 0:
+                            skills_donut = px.pie(
+                                skill_counts,
+                                names="Status",
+                                values="Number of skills",
+                                title="Skills distribution",
+                                hole=0.58,
+                                template="plotly_white",
+                                color="Status",
+                                color_discrete_map={
+                                    "Matching skill": "#2563EB",
+                                    "Skill to develop": "#F59E0B",
+                                },
+                            )
+                            skills_donut.update_traces(
+                                textposition="inside", textinfo="percent+label"
+                            )
+                            skills_donut.update_layout(
+                                margin=dict(l=10, r=10, t=55, b=10),
+                                legend_title_text="",
+                            )
+                            st.plotly_chart(skills_donut, use_container_width=True)
+                        else:
+                            st.info("No skill data is available to chart.")
+
+                    st.markdown("### Detailed skills comparison")
+                    st.dataframe(
+                        skills_df.astype({"Status": "string"}),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+                    st.caption(
+                        "These charts summarize the AI-generated analysis; "
+                        "they do not independently verify qualifications."
+                    )
+                else:
+                    st.info(
+                        "The AI did not return skills to chart for this analysis."
+                    )
 
                 tab1, tab2, tab3 = st.tabs([
                     "Match overview",
