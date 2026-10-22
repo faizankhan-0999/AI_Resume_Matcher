@@ -15,6 +15,9 @@ and suggests truthful, practical ways to improve a resume.
 - PDF text extraction with pypdf.
 - Detection of scanned/image-only PDFs (OCR is not included).
 - Estimated match score from 0–100.
+- Pandas-powered skills comparison table for matching and missing skills.
+- Interactive Plotly bar and donut charts for skills analytics.
+- Dashboard metrics for match score, matching skills, and skills to develop.
 - Matching skills, missing skills, strengths, resume improvements,
   relevant keywords, and interview preparation suggestions.
 - Structured JSON output validated with Pydantic before display.
@@ -190,8 +193,9 @@ application logs. Provider and hosting operational processing may still apply.
 
 ## Model and SDK
 
-The app uses the stable model identifier `gemini-3.8-flash` and Google's
-official `google-genai` Python SDK.
+The app uses the configured Gemini model identifier in `app.py` and Google's
+official `google-genai` Python SDK. Pandas organizes the skills data into tables,
+and Plotly Express renders the interactive analytics charts.
 
 Check the official Gemini model list if availability changes:
 
